@@ -1,87 +1,69 @@
 const express = require('express');
-const { google } = require('googleapis');
-const bodyParser = require('body-parser');
 const cors = require('cors');
-const fs = require('fs');
+const { google } = require('googleapis');
+const keys = require('./credentials.json');
 
-// Initialize the Express app
 const app = express();
+const sheets = google.sheets('v4');
 const PORT = process.env.PORT || 3000;
 
-// Middleware to parse JSON
 app.use(cors());
-app.use(bodyParser.json());
+app.use(express.json());
 
-// Google Sheets setup
-const SCOPES = ['https://www.googleapis.com/auth/spreadsheets'];
-const spreadsheetId = process.env.SHEET_ID || 'your-spreadsheet-id'; // Replace with your spreadsheet ID
+// Authorize Google Sheets API
+const auth = new google.auth.GoogleAuth({
+    credentials: keys,
+    scopes: ['https://www.googleapis.com/auth/spreadsheets'],
+});
 
-// Load client secrets from the `credentials.json` file
-const credentials = JSON.parse(fs.readFileSync('credentials.json', 'utf8')); // Or use environment variables in production
+// Google Sheets ID
+const SPREADSHEET_ID = '1EZpvDxmT17YEx0lUXq_2vfLNvz03iDDkPnW3uWTxbkw';
 
-// Authorize a client with credentials, then call the Google Sheets API
-async function authorize() {
-    const { client_email, private_key } = credentials;
-    const auth = new google.auth.JWT(
-        client_email,
-        null,
-        private_key.replace(/\\n/g, '\n'), // Handle the newline issue in private keys
-        SCOPES
-    );
-    return auth;
-}
-
-// Save player score to Google Sheets
+// API endpoint to save scores
 app.post('/saveScore', async (req, res) => {
     const { playerName, score } = req.body;
-    
+
     try {
-        const auth = await authorize();
-        const sheets = google.sheets({ version: 'v4', auth });
-
+        const client = await auth.getClient();
         await sheets.spreadsheets.values.append({
-            spreadsheetId,
-            range: 'Sheet1!A:C', // Assuming columns A-C store playerName, score, and date
-            valueInputOption: 'USER_ENTERED',
-            resource: {
-                values: [[playerName, score, new Date().toISOString()]]
-            }
+            auth: client,
+            spreadsheetId: SPREADSHEET_ID,
+            range: 'Leaderboard!A:B',
+            valueInputOption: 'RAW',
+            requestBody: {
+                values: [[playerName, score]],
+            },
         });
-
-        res.status(200).send({ message: 'Score saved successfully' });
+        res.status(200).send({ message: 'Score saved successfully!' });
     } catch (error) {
         console.error('Error saving score:', error);
-        res.status(500).send({ message: 'Failed to save score', error: error.message });
+        res.status(500).send({ message: 'Error saving score' });
     }
 });
 
-// Retrieve top 5 scores from Google Sheets
+// API endpoint to get the leaderboard
 app.get('/leaderboard', async (req, res) => {
     try {
-        const auth = await authorize();
-        const sheets = google.sheets({ version: 'v4', auth });
-
-        const result = await sheets.spreadsheets.values.get({
-            spreadsheetId,
-            range: 'Sheet1!A:C' // Assuming columns A-C store playerName, score, and date
+        const client = await auth.getClient();
+        const response = await sheets.spreadsheets.values.get({
+            auth: client,
+            spreadsheetId: SPREADSHEET_ID,
+            range: 'Leaderboard!A:B',
         });
 
-        const rows = result.data.values || [];
-        
-        // Sort by score (column B), then return the top 5
-        const sortedScores = rows
-            .slice(1) // Skip the header row
-            .sort((a, b) => b[1] - a[1]) // Sort by score
-            .slice(0, 5); // Get the top 5 scores
+        const rows = response.data.values || [];
+        const leaderboard = rows
+            .map((row) => ({ name: row[0], score: row[1] }))
+            .sort((a, b) => b.score - a.score)
+            .slice(0, 5);
 
-        res.status(200).send(sortedScores);
+        res.status(200).json(leaderboard);
     } catch (error) {
         console.error('Error retrieving leaderboard:', error);
-        res.status(500).send({ message: 'Failed to retrieve leaderboard', error: error.message });
+        res.status(500).send({ message: 'Error retrieving leaderboard' });
     }
 });
 
-// Start the server
 app.listen(PORT, () => {
     console.log(`Server running on port ${PORT}`);
 });
