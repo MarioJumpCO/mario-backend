@@ -17,7 +17,7 @@ const auth = new google.auth.GoogleAuth({
 });
 
 // Google Sheets ID
-const SPREADSHEET_ID = '1EZpvDxmT17YEx0lUXq_2vfLNvz03iDDkPnW3uWTxbkw';
+const SPREADSHEET_ID = '1EZpvDxmT17YEx0lUXq_2vfLNvz03iDDkPnW3uWTxbkw';  // Replace with your Sheet ID
 
 // API endpoint to save scores
 app.post('/saveScore', async (req, res) => {
@@ -34,10 +34,12 @@ app.post('/saveScore', async (req, res) => {
                 values: [[playerName, score]],
             },
         });
-        res.status(200).send({ message: 'Score saved successfully!' });
+        // Send a successful JSON response
+        res.status(200).json({ message: 'Score saved successfully!' });
     } catch (error) {
         console.error('Error saving score:', error);
-        res.status(500).send({ message: 'Error saving score' });
+        // Send an error JSON response
+        res.status(500).json({ message: 'Error saving score', error: error.message });
     }
 });
 
@@ -57,13 +59,16 @@ app.get('/leaderboard', async (req, res) => {
             .sort((a, b) => b.score - a.score)
             .slice(0, 5);
 
+        // Send the leaderboard data as JSON
         res.status(200).json(leaderboard);
     } catch (error) {
         console.error('Error retrieving leaderboard:', error);
-        res.status(500).send({ message: 'Error retrieving leaderboard' });
+        // Send an error JSON response
+        res.status(500).json({ message: 'Error retrieving leaderboard', error: error.message });
     }
 });
 
+// Start the server
 app.listen(PORT, () => {
     console.log(`Server running on port ${PORT}`);
 });
